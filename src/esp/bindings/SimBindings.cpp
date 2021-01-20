@@ -47,6 +47,8 @@ void initSimBindings(py::module& m) {
                      &SimulatorConfiguration::loadSemanticMesh)
       .def_readwrite("requires_textures",
                      &SimulatorConfiguration::requiresTextures)
+      .def_readwrite("scene_dataset_config_file",
+                     &SimulatorConfiguration::sceneDatasetConfigFile)
       .def(py::self == py::self)
       .def(py::self != py::self);
 
@@ -88,6 +90,9 @@ void initSimBindings(py::module& m) {
           &Simulator::setActiveSceneDatasetName,
           R"(The currently active dataset being used.  Will attempt to load
             configuration files specified if does not already exist.)")
+
+      .def("load_scene_instances", &Simulator::loadSceneInstances, "configuration"_a)
+
       /* --- Physics functions --- */
       /* --- Template Manager accessors --- */
       .def("get_asset_template_manager", &Simulator::getAssetAttributesManager,

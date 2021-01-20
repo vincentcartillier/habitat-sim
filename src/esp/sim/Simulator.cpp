@@ -902,5 +902,134 @@ void Simulator::setObjectLightSetup(const int objectID,
   }
 }
 
+void Simulator::loadSceneInstance(std::string sceneInstanceHandle,
+                                  SimulatorConfiguration& cfg) {
+  auto sceneAttrManager_ =
+      metadataMediator_->getSceneAttributesManager();
+
+  auto matchingSceneHandles =
+      sceneAttrManager_->getObjectHandlesBySubstring(sceneInstanceHandle);
+
+  auto sceneTemplate =
+      sceneAttrManager_->getObjectByHandle(matchingSceneHandles[0]);
+
+  auto stageAttrManager_=
+      metadataMediator_->getStageAttributesManager();
+
+  // 1. reconfigure with new stage
+  // note: opportunity for ambiguity
+  cfg.scene.id = stageAttrManager_->getObjectHandlesBySubstring(
+      sceneTemplate->getStageInstance()->getHandle())[0];
+  if (stageAttrManager_->getObjectByHandle(cfg.scene.id)
+          ->getRequiresLighting()) {
+    cfg.sceneLightSetup =
+        esp::assets::ResourceManager::DEFAULT_LIGHTING_KEY;
+  } else {
+    cfg.sceneLightSetup = esp::assets::ResourceManager::NO_LIGHT_KEY;
+  }
+  // TODO: lighting
+
+  reconfigure(cfg);
+  // remove any objects leftover (when stage did not change)
+  for (auto id : getExistingObjectIDs()) {
+    removeObject(id);
+  }
+
+  // 2. load new NavMesh
+  getPathFinder().reset();
+  if (!sceneTemplate->getNavmeshHandle().empty()) {
+    if (getMetadataMediator()->getActiveNavmeshMap().count(
+            sceneTemplate->getNavmeshHandle()) > 0) {
+      auto navmeshSource =
+          getMetadataMediator()->getActiveNavmeshMap().at(
+              sceneTemplate->getNavmeshHandle());
+      auto navmeshFullSource = Corrade::Utility::Directory::join(
+          Corrade::Utility::Directory::path(cfg.sceneDatasetConfigFile),
+          navmeshSource);
+
+      bool success =
+          getPathFinder()->loadNavMesh(navmeshFullSource);
+    } else {
+    }
+  }
+  // TODO: this should be more graceful
+  if (isNavMeshVisualizationActive()) {
+    setNavMeshVisualization(false);
+    setNavMeshVisualization(true);
+  }
+
+  // 3. load the LightSetup
+  if (!sceneTemplate->getLightingHandle().empty()) {
+    instanceLightSetup(sceneTemplate->getLightingHandle());
+  }
+
+
+  auto objectAttrManager_ = metadataMediator_->getObjectAttributesManager();
+
+  // 4. load new objects
+  for (auto objectInstance : sceneTemplate->getObjectInstances()) {
+    // note: opportunity for ambiguity due to substring search
+    auto objectHandle = objectAttrManager_->getObjectHandlesBySubstring(
+        objectInstance->getHandle())[0];
+    auto id = addObjectByHandle(objectHandle);
+    auto objCOMShift =
+        getObjectVisualSceneNodes(id)[0]->translation();
+    setTranslation(objectInstance->getTranslation() - objCOMShift,
+                               id);
+    setRotation(objectInstance->getRotation(), id);
+    setObjectMotionType(
+        esp::physics::MotionType(objectInstance->getMotionType()), id);
+  }
+}
+
+
+
+void Simulator::instanceLightSetup(std::string lightSetupHandle) {
+  auto lightMgr =
+      getMetadataMediator()->getLightLayoutAttributesManager();
+  auto matchingHandles =
+      lightMgr->getObjectHandlesBySubstring(lightSetupHandle);
+  if (!matchingHandles.empty()) {
+    auto lightLayoutAttr = lightMgr->getObjectByHandle(matchingHandles[0]);
+    esp::gfx::LightSetup lightSetup;
+
+    for (auto lightInstanceInfo : lightLayoutAttr->getLightInstances()) {
+      esp::gfx::LightInfo lightInfo;
+      lightInfo.color = lightInstanceInfo.second->getColor() *
+                        lightInstanceInfo.second->getIntensity();
+      if (lightInstanceInfo.second->getType() == "point") {
+        lightInfo.vector = {lightInstanceInfo.second->getPosition(), 1};
+      } else if (lightInstanceInfo.second->getType() == "directional") {
+        lightInfo.vector = {lightInstanceInfo.second->getDirection(), 0};
+      } else {
+        continue;
+      }
+      lightSetup.push_back(lightInfo);
+    }
+    // override the default light setup for simplicity
+    setLightSetup(lightSetup);
+  } else {
+  }
+}
+
+
+
+void Simulator::loadSceneInstances(SimulatorConfiguration& cfg) {
+  auto sceneAttrManager_ =
+      metadataMediator_->getSceneAttributesManager();
+
+  std::string sceneInstanceHandle =
+    sceneAttrManager_->getObjectHandlesBySubstring()[2];
+
+  loadSceneInstance(sceneInstanceHandle,
+                    cfg);
+}
+
+
+
+
+
+
+
 }  // namespace sim
 }  // namespace esp

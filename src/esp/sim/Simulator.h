@@ -702,6 +702,12 @@ class Simulator {
                            const std::string& lightSetupKey,
                            int sceneID = 0);
 
+  void loadSceneInstance(std::string sceneInstanceHandle,
+                         SimulatorConfiguration& cfg);
+  void instanceLightSetup(std::string lightSetupHandle);
+  void loadSceneInstances(SimulatorConfiguration& cfg);
+
+
   /**
    * @brief Getter for PRNG.
    *
