@@ -1019,7 +1019,7 @@ void Simulator::loadSceneInstances(SimulatorConfiguration& cfg) {
       metadataMediator_->getSceneAttributesManager();
 
   std::string sceneInstanceHandle =
-    sceneAttrManager_->getObjectHandlesBySubstring()[2];
+    sceneAttrManager_->getObjectHandlesBySubstring()[0];
 
   loadSceneInstance(sceneInstanceHandle,
                     cfg);
