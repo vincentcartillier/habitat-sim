@@ -77,8 +77,9 @@ def make_default_settings(scene, dataset_file):
         "height": 480,
         #"scene": "./data/replicaCAD_dataset_v1_4/stages/frl_apartment_stage.glb",  # Scene path
         #"dataset-file":"./data/replicaCAD_dataset_v1_4/replicaCAD.scene_dataset_config.json",
+        #"dataset-file":"./data/replicaCAD_dataset_v1_4/3D-SMNet-dataset/stage_0.scene_apt_5.id_0.scene_dataset_config.json",
         "scene": scene,
-        "dataset-file": dataset_file, 
+        "dataset-file": dataset_file,
         "default_agent": 0,
         "sensor_height": 1.5,  # Height of sensors in meters
         "sensor_pitch": -math.pi / 8.0,  # sensor pitch (x rotation in rads)
@@ -127,21 +128,24 @@ def set_object_state_from_agent(
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    
-    scene = "./data/replicaCAD_dataset_v1_4/stages/frl_apartment_stage.glb",  # Scene path
-    dataset_file = "./data/replicaCAD_dataset_v1_4/replicaCAD.scene_dataset_config.json",
+
+    scene = "./data/replicaCAD_dataset_v1_4/stages/frl_apartment_stage.glb"  # Scene path
+    dataset_file = "./data/replicaCAD_dataset_v1_4/3D-SMNet-dataset/stage_0.scene_apt_5.id_0.scene_dataset_config.json"
 
 
     sim_settings = make_default_settings(scene, dataset_file)
     sim, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr = make_simulator_from_settings(sim_settings)
-    
+
     sim.reset()
+
+    #TODO: rotate agent to actually see the scene (180deg)
     sim.load_scene_instances(sim_cfg)
 
     observations = sim.get_sensor_observations()
     rgb = observations["color_sensor_1st_person"]
 
     plt.imshow(rgb)
+    plt.show()
 
 
 
