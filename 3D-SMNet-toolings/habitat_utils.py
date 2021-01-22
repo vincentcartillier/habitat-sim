@@ -51,6 +51,9 @@ def make_cfg(settings):
             "orientation": np.array([-math.pi / 4, 0, 0]),
         },
     }
+    
+    # access sensor specs from cfg
+    #cfg.agents[0].sensor_specifications[0].parameters
 
     sensor_specs = []
     for sensor_uuid, sensor_params in sensors.items():
@@ -68,7 +71,7 @@ def make_cfg(settings):
     agent_cfg = habitat_sim.agent.AgentConfiguration()
     agent_cfg.sensor_specifications = sensor_specs
 
-    return habitat_sim.Configuration(sim_cfg, [agent_cfg])
+    return sim_cfg, habitat_sim.Configuration(sim_cfg, [agent_cfg])
 
 
 def make_default_settings(scene, dataset_file):
@@ -85,8 +88,8 @@ def make_default_settings(scene, dataset_file):
         "sensor_pitch": -math.pi / 8.0,  # sensor pitch (x rotation in rads)
         "color_sensor_1st_person": True,  # RGB sensor
         "color_sensor_3rd_person": True,  # RGB sensor 3rd person
-        "depth_sensor_1st_person": False,  # Depth sensor
-        "semantic_sensor_1st_person": False,  # Semantic sensor
+        "depth_sensor_1st_person": True,  # Depth sensor
+        "semantic_sensor_1st_person": True,  # Semantic sensor
         "seed": 1,
         "enable_physics": False,  # enable dynamics simulation
     }
@@ -94,7 +97,7 @@ def make_default_settings(scene, dataset_file):
 
 
 def make_simulator_from_settings(sim_settings):
-    cfg = make_cfg(sim_settings)
+    sim_cfg, cfg = make_cfg(sim_settings)
     # initialize the simulator
     sim = habitat_sim.Simulator(cfg)
     # Managers of various Attributes templates
@@ -103,7 +106,7 @@ def make_simulator_from_settings(sim_settings):
     prim_attr_mgr = sim.get_asset_template_manager()
     stage_attr_mgr = sim.get_stage_template_manager()
 
-    return sim, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr
+    return sim, sim_cfg, cfg, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr
 
 
 
@@ -134,7 +137,7 @@ if __name__ == "__main__":
 
 
     sim_settings = make_default_settings(scene, dataset_file)
-    sim, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr = make_simulator_from_settings(sim_settings)
+    sim, sim_cfg, cfg, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr = make_simulator_from_settings(sim_settings)
 
     sim.reset()
 

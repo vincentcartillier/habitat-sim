@@ -2,16 +2,15 @@ import os
 import sys
 import cv2
 import json
-from tqdm import tqdm
+import math
 
 import numpy as np
 
 import habitat_sim
 
 import habitat_utils
-from projector import PointCloud
-from projector.core import _transform3D
 
+import matplotlib.pyplot as plt
 
 # TODO: 
 # get projection parameters from cfg (hov, widht, height)
@@ -38,10 +37,6 @@ path = json.load(open(
                  )
 
 
-
-
-
-
 """
     Load habitat
 """
@@ -60,34 +55,39 @@ sim.load_scene_instances(sim_cfg)
 """
     Init Projector
 """
-import torch
 # assumption: ALL sensors have the same parameters
 hfov = float(cfg.agents[0].sensor_specifications[0].parameters['hfov'])
 hfov = hfov * np.pi / 180.0
 near = float(cfg.agents[0].sensor_specifications[0].parameters['near'])
 far  = float(cfg.agents[0].sensor_specifications[0].parameters['hfov'])
 
-image_height, image_width = cfg.agents[0].sensor_specifications[0].resolution
+height, width = cfg.agents[0].sensor_specifications[0].resolution
 
-vfov = hfov * image_height / image_width
+vfov = hfov * height / width
 
-z_clip = 3.0 #m
-world_shift = torch.FloatTensor([0,0,0])
 
-projector = PointCloud(vfov,
-                       1,
-                       image_height,
-                       image_width,
-                       world_shift,
-                       z_clip,
-                       device = torch.device("cpu")
-                      )
+f_x = width / (2.0*math.tan(hfov/2.0))
+f_y = height / (2.0*math.tan(vfov/2.0))
+cy = height / 2.0
+cx = width / 2.0
+K = np.array([[f_x, 0, cx],
+              [0, f_y, cy],
+              [0, 0, 1.0]])
+
+
+x_grid, y_grid = np.meshgrid(np.arange(width), np.arange(height))
+x_grid = x_grid.astype(np.float) 
+y_grid = y_grid.astype(np.float)
+
+# 0.5 is so points are projected through the center of pixels
+x_scale = (x_grid - cx - 0.5) / f_x#; print(x_scale[0,0,:])
+y_scale = (y_grid - cy - 0.5) / f_y#; print(y_scale[0,:,0]); stop
+ 
 
 
 """
     BUILD POINT CLOUD
 """
-
 positions = path['positions']
 orientations = path['orientations']
 
@@ -118,87 +118,84 @@ for i, data in tqdm(enumerate(zip(positions, orientations))):
     agent_state = sim.agents[0].get_state()
     sensor_state = agent_state.sensor_states['depth_sensor_1st_person']
 
-    sensor_pos = sensor_state.position
-    sensor_rot = sensor_state.rotation
-   
-    T = _transform3D(sensor_pos, 
-                     sensor_rot)
+    position = sensor_state.position
+    rotation = sensor_state.rotation
+
+    s = rotation.norm()
+    qi = rotation.x
+    qj = rotation.y
+    qk = rotation.z
+    qr = rotation.w
+    
+    R = np.array([
+        [1 - 2*s*(qj**2 + qk**2), 2*s*(qi*qj-qk*qr), 2*s*(qi*qk+qj*qr)],
+        [2*s*(qi*qj+qk*qr), 1 - 2*s*(qi**2 + qk**2), 2*s*(qj*qk-qi*qr)],
+        [2*s*(qi*qk-qj*qr), 2*s*(qj*qk+qi*qr), 1 - 2*s*(qi**2 + qj**2)],
+    ])
+    
+    #rotate 180 around x to put y up
+    # convert CV to robotics conventions coords
+    R_yup = np.array([
+        [1, 0, 0],
+        [0, np.cos(np.pi), -np.sin(np.pi)],
+        [0, np.sin(np.pi), np.cos(np.pi)]
+    ])
+    
+    
+    R = np.matmul(R, R_yup)
+    
+ 
+    T = np.zeros((4, 4))
+    T[0:3, 0:3] = R
+    T[0:3,3] = np.array(position)
+    T[3,3] =  1
 
 
-    observations = sim.get_sensor_observations()
+
+
     depth = observations["depth_sensor_1st_person"]
     depth = depth.astype(np.float32)
-    depth_var = torch.FloatTensor(depth.copy()).unsqueeze(0).unsqueeze(0)
+    
+    mask_outliers = depth == 0
 
-    pc, mask_outliers = projector.forward(depth_var, T)
+    z = depth 
+    x = z * x_scale
+    y = z * y_scale
+    ones = np.ones(z.shape)
+    
+    pc = np.concatenate((x[:,:,np.newaxis],
+                         y[:,:,np.newaxis],
+                         z[:,:,np.newaxis],
+                         ones[:,:,np.newaxis],
+                        ), axis=2)
     
     pc = pc[~mask_outliers]
-    pc = pc.numpy()
 
+    # TRANSFORMATION 
+    pc = np.matmul(T, pc.T)
+    pc = pc.T
+    pc = pc[:,:3]
 
     rgb = observations["color_sensor_1st_person"]
-    mask_inliers = ~mask_outliers[0].numpy()
-    rgb = rgb[mask_inliers]
+    rgb = rgb[~mask_outliers]
 
     pc = np.concatenate((pc, rgb), axis=1)
 
     point_cloud = np.concatenate((point_cloud, pc), axis=0)
+   
+    if i < 13:
+        file = open(
+                    os.path.join(output_dir, 'pc_{}--debug-{}.txt'.format(env, i)),
+                    'w')
+         
+        tmp_point_cloud = point_cloud[0:-1:10, :]
+        for v in tqdm(tmp_point_cloud):
+            line = str(v[0]) + ' ' + str(v[1]) + ' ' + str(v[2])
+            line = line + ' ' + str(v[3]) + ' ' + str(v[4])  + ' ' + str(v[5]) +  '\n'
+            file.write(line)
+        
+        file.close()
 
-
-print(' #points = ', len(point_cloud))
-
-point_cloud = point_cloud[0:-1:10, :]
-
-print(' #points after subsampling = ', len(point_cloud))
-
-print(' -- saving to JSON')
-point_cloud_list = point_cloud.tolist()
-json.dump(point_cloud_list,
-          open(
-              os.path.join(output_dir, 'pc_{}.json'.format(env)),
-              'w'))
-
-print(' -- saving to TXT')
-# --  save semantic point cloud file
-file = open(
-            os.path.join(output_dir, 'pc_{}.txt'.format(env)),
-            'w')
-
-for v in tqdm(point_cloud):
-    line = str(v[0]) + ' ' + str(v[1]) + ' ' + str(v[2])
-    line = line + ' ' + str(v[3]) + ' ' + str(v[4])  + ' ' + str(v[5]) +  '\n'
-    file.write(line)
-
-file.close()
-
-
-
-
-
-
-"""
-
-
-VIEWING DEBUGGING TOOLS
-
-
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-import numpy as np
-
-pc = point_cloud[0:-1:100, :]
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-x = pc[:,0]
-y = pc[:,1]
-z = pc[:,2]
-
-ax.scatter(x, y, z)
-
-plt.show()
-"""
-
+    if i==13: break
 
 

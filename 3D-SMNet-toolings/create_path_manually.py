@@ -2,8 +2,6 @@ import os
 import sys
 import cv2
 import json
-import math
-import random
 
 import numpy as np
 
@@ -11,25 +9,32 @@ import habitat_sim
 
 import habitat_utils
 
-dir_path = './'
-data_path = os.path.join(dir_path, "data")
+
+"""
+    Settings / Paths
+"""
+data_dir = './data/replicaCAD_dataset_v1_4/'
+stage = 'frl_apartment_stage.glb'
+layout = 'stage_0.scene_apt_3.id_1.scene_dataset_config.json'
+
+scene = os.path.join(data_dir, "stages", stage )   # Scene path
+dataset_file = os.path.join(data_dir, "3D-SMNet-dataset", layout)
+
+output_dir = "./data/paths/"
 
 
-# %%
-# @title Initialize Simulator and Load Scene { display-mode: "form" }
+env = '.'.join(layout.split('.')[:-2])
 
-# convienience functions defined in Utility cell manage global variables
-scene = "./data/replicaCAD_dataset_v1_4/stages/frl_apartment_stage.glb",  # Scene path
-dataset_file = "./data/replicaCAD_dataset_v1_4/replicaCAD.scene_dataset_config.json",
 
+"""
+    CREATING PATHS MANUALLY
+"""
 sim_settings = habitat_utils.make_default_settings(scene, dataset_file)
-# set globals: sim,
- 
-sim, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr = habitat_utils.make_simulator_from_settings(sim_settings)
+
+sim, sim_cfg, cfg, obj_attr_mgr, prim_attr_mgr, stage_attr_mgr = habitat_utils.make_simulator_from_settings(sim_settings)
 
 sim.reset()
 sim.load_scene_instances(sim_cfg)
-
 
 state = sim.agents[0].state
 
@@ -52,10 +57,13 @@ while True:
     cv2.imshow("window", rgb)
     key = cv2.waitKey(0)
     if key == 27 or key == ord('q'): #esc
-        data[env] = {'positions': positions,
-                     'orientations': orientations,
-                     'actions': actions}
-        json.dump(data, open('test-replicaCAD/paths/path_{}.json'.format(env), 'w'))
+        data = {'positions': positions,
+                'orientations': orientations,
+                'actions': actions}
+        json.dump(data,
+                  open(
+                      os.path.join(output_dir, 'path_{}.json'.format(env)),
+                      'w'))
         break
     elif key == ord('w'):
         sim.step('move_forward')
