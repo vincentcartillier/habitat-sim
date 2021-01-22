@@ -107,6 +107,12 @@ void ObjectAttributesManager::setValsFromJSONDoc(
       jsonConfig, "inertia",
       std::bind(&ObjectAttributes::setInertia, objAttributes, _1));
 
+
+  io::jsonIntoSetter<int>(
+      jsonConfig, "semantic_id",
+      std::bind(&ObjectAttributes::setSemanticId, objAttributes, _1));
+
+
   // The center of mass (in the local frame of the object)
   // if COM is provided, use it for mesh shift
   bool comIsSet = io::jsonIntoConstSetter<Magnum::Vector3>(

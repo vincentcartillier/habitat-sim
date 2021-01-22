@@ -231,9 +231,11 @@ class ObjectAttributes : public AbstractObjectAttributes {
   void setIsVisible(bool isVisible) { setBool("isVisible", isVisible); }
   bool getIsVisible() const { return getBool("isVisible"); }
 
-  void setSemanticId(uint32_t semanticId) { setInt("semanticId", semanticId); }
+  //void setSemanticId(uint32_t semanticId) { setInt("semanticId", semanticId); }
+  void setSemanticId(uint32_t semanticId) { setInt("semantic_id", semanticId); }
 
-  uint32_t getSemanticId() const { return getInt("semanticId"); }
+  //uint32_t getSemanticId() const { return getInt("semanticId"); }
+  uint32_t getSemanticId() const { return getInt("semantic_id"); }
 
   // if object should be checked for collisions - if other objects can collide
   // with this object
