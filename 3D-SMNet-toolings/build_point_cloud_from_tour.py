@@ -3,6 +3,7 @@ import sys
 import cv2
 import json
 from tqdm import tqdm
+import open3d as o3d
 
 import numpy as np
 
@@ -13,7 +14,7 @@ from projector import PointCloud
 from projector.core import _transform3D
 
 
-# TODO: 
+# TODO:
 # get projection parameters from cfg (hov, widht, height)
 
 """
@@ -71,6 +72,7 @@ image_height, image_width = cfg.agents[0].sensor_specifications[0].resolution
 
 vfov = hfov * image_height / image_width
 
+# -- set to default
 z_clip = 3.0 #m
 world_shift = torch.FloatTensor([0,0,0])
 
@@ -91,14 +93,14 @@ projector = PointCloud(vfov,
 positions = path['positions']
 orientations = path['orientations']
 
-point_cloud = np.empty((0,7))
+point_cloud = o3d.geometry.PointCloud()
 
 print(' -- creating point cloud')
 for i, data in tqdm(enumerate(zip(positions, orientations))):
-    
+
     # -- set agent pos/rot
     pos, ori = data
-    
+
     agent_state = sim.agents[0].get_state()
 
     agent_state.position[0] = pos[0]
@@ -109,19 +111,19 @@ for i, data in tqdm(enumerate(zip(positions, orientations))):
     agent_state.rotation.y = ori[1]
     agent_state.rotation.z = ori[2]
     agent_state.rotation.w = ori[3]
-    
+
     sim.agents[0].set_state(agent_state)
-    
+
     observations = sim.get_sensor_observations()
-    
+
     # -- get agent sensor position
     agent_state = sim.agents[0].get_state()
     sensor_state = agent_state.sensor_states['depth_sensor_1st_person']
 
     sensor_pos = sensor_state.position
     sensor_rot = sensor_state.rotation
-   
-    T = _transform3D(sensor_pos, 
+
+    T = _transform3D(sensor_pos,
                      sensor_rot)
 
 
@@ -131,49 +133,34 @@ for i, data in tqdm(enumerate(zip(positions, orientations))):
     depth_var = torch.FloatTensor(depth.copy()).unsqueeze(0).unsqueeze(0)
 
     pc, mask_outliers = projector.forward(depth_var, T)
-    
+
     pc = pc[~mask_outliers]
     pc = pc.numpy()
 
 
-    rgb = observations["color_sensor_1st_person"]
+    rgba = observations["color_sensor_1st_person"]
     mask_inliers = ~mask_outliers[0].numpy()
-    rgb = rgb[mask_inliers]
+    rgba = rgba[mask_inliers]
+    
+    rgb = rgba[:,:3]
+    rgb = rgb.astype(np.float)
+    rgb = rgb / 255.0
 
-    pc = np.concatenate((pc, rgb), axis=1)
+    tmp_pcd = o3d.geometry.PointCloud()
+    tmp_pcd.points = o3d.utility.Vector3dVector(pc)
+    tmp_pcd.colors = o3d.utility.Vector3dVector(rgb)
 
-    point_cloud = np.concatenate((point_cloud, pc), axis=0)
-
-
-print(' #points = ', len(point_cloud))
-
-point_cloud = point_cloud[0:-1:10, :]
-
-print(' #points after subsampling = ', len(point_cloud))
-
-print(' -- saving to JSON')
-point_cloud_list = point_cloud.tolist()
-json.dump(point_cloud_list,
-          open(
-              os.path.join(output_dir, 'pc_{}.json'.format(env)),
-              'w'))
-
-print(' -- saving to TXT')
-# --  save semantic point cloud file
-file = open(
-            os.path.join(output_dir, 'pc_{}.txt'.format(env)),
-            'w')
-
-for v in tqdm(point_cloud):
-    line = str(v[0]) + ' ' + str(v[1]) + ' ' + str(v[2])
-    line = line + ' ' + str(v[3]) + ' ' + str(v[4])  + ' ' + str(v[5]) +  '\n'
-    file.write(line)
-
-file.close()
+    point_cloud += tmp_pcd
 
 
 
+# convert coordinates to match VoteNet -> Done in VoteNet preprocess point cloud
+# -- point_cloud[...,[0,1,2]] = point_cloud[...,[0,2,1]]
+# -- point_cloud[...,1] *= 1
 
+o3d.io.write_point_cloud(os.path.join(output_dir, 
+                                      'pc_{}.ply'.format(env)), 
+                         point_cloud)
 
 
 """
